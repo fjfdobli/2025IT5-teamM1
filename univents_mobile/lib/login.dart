@@ -62,13 +62,19 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       _logDiagnostics('Starting Google Sign-In process');
 
-      // Configure Google Sign In
+      // Configure Google Sign In with enhanced account selection
       final GoogleSignIn googleSignIn = GoogleSignIn(
         scopes: ['email', 'profile'],
         signInOption: SignInOption.standard,
+        forceCodeForRefreshToken:
+            true, // Force account selection dialog every time
       );
 
-      // Display Google sign-in dialog
+      // Ensure we're signed out before signing in to always show account picker
+      await googleSignIn.signOut();
+      _logDiagnostics('Cleared previous sign-in state to show account picker');
+
+      // Display Google sign-in dialog with account selection
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
       if (googleUser == null) {
@@ -141,6 +147,68 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       _logDiagnostics('Error during troubleshooting: $e');
+    }
+  }
+
+  // Function to switch Google accounts or add new account
+  Future<void> _switchGoogleAccount() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      _logDiagnostics('Starting account switch process');
+
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        scopes: ['email', 'profile'],
+        signInOption: SignInOption.standard,
+        forceCodeForRefreshToken: true,
+      );
+
+      // Force sign out to clear current account selection
+      await googleSignIn.signOut();
+      _logDiagnostics('Signed out current user to show account picker');
+
+      // Show account selection dialog
+      final GoogleSignInAccount? newAccount = await googleSignIn.signIn();
+
+      if (newAccount == null) {
+        _logDiagnostics('Account switch was cancelled');
+        throw Exception('Account selection was cancelled');
+      }
+
+      _logDiagnostics('Switched to account: ${newAccount.email}');
+
+      // Handle the account switch - navigate to dashboard with new account
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder:
+                (context) => HomeScreen(
+                  userEmail: newAccount.email,
+                  userRole: 'student', // Default role per requirements
+                ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _logDiagnostics('Error switching accounts: $e');
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Account switch failed: ${e.toString()}'),
+            backgroundColor: Colors.red[700],
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -329,18 +397,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: ElevatedButton.icon(
                       icon: Image.asset(
                         'assets/images/google_logo.png',
-                        height: 60,
+                        height: 55,
                       ),
                       label: const Text(''),
                       onPressed: _isLoading ? null : _signInWithGoogle,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black87,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 1,
-                          horizontal: 7,
-                        ),
-                      ),
                     ),
                   ),
                 ],
