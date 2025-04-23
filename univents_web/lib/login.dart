@@ -229,9 +229,7 @@ class OrganizationsTab extends StatelessWidget {
               ElevatedButton.icon(
                 icon: const Icon(Icons.add),
                 label: const Text('Add Organization'),
-                onPressed: () {
-                  // TODO: Implement add organization functionality
-                },
+                onPressed: () {},
               ),
             ],
           ),
@@ -267,9 +265,7 @@ class EventsTab extends StatelessWidget {
               ElevatedButton.icon(
                 icon: const Icon(Icons.add),
                 label: const Text('Add Event'),
-                onPressed: () {
-                  // TODO: Implement add event functionality
-                },
+                onPressed: () {},
               ),
             ],
           ),

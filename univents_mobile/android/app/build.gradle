@@ -30,7 +30,7 @@ if (flutterVersionName == null) {
 android {
     namespace "com.example.univents_mobile"
     compileSdkVersion flutter.compileSdkVersion
-    ndkVersion flutter.ndkVersion
+    ndkVersion "27.0.12077973" // Updated to fix NDK version compatibility issues
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
@@ -61,4 +61,13 @@ flutter {
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    implementation 'com.google.android.gms:play-services-auth:20.7.0'
+    // Make sure all dependencies are compatible
+    implementation 'androidx.browser:browser:1.6.0'
+    implementation 'com.google.android.gms:play-services-base:18.3.0'
+    implementation 'com.google.android.gms:play-services-identity:18.0.1'
+    
+    // Additional network and Google Play Services dependencies
+    implementation 'com.google.android.gms:play-services-tasks:18.1.0'
+    implementation 'com.google.android.gms:play-services-basement:18.3.0'
 }
