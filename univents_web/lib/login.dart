@@ -1,6 +1,7 @@
+import 'dart:async';
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 
 class WebLoginScreen extends StatefulWidget {
   const WebLoginScreen({super.key});
@@ -10,88 +11,141 @@ class WebLoginScreen extends StatefulWidget {
 }
 
 class _WebLoginScreenState extends State<WebLoginScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
   bool _isLoading = false;
+  String _errorMessage = '';
   final _supabase = Supabase.instance.client;
+  StreamSubscription? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSession();
+    _setupMessageListener();
+
+    // Set up auth state listener
+    _authSubscription = _supabase.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn) {
+        _navigateToAdminDashboard();
+      }
+    });
+  }
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _authSubscription?.cancel();
     super.dispose();
   }
 
-  Future<void> _signInWithGoogle() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      // Initialize Google Sign In
-      final GoogleSignIn googleSignIn = GoogleSignIn(
-        clientId:
-            '140959521015-35ienrnko4hnccue9ejmvum5gd1q0g4t.apps.googleusercontent.com',
-        scopes: ['email', 'profile'],
-      );
-
-      // Start the Google sign-in flow
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-
-      if (googleUser == null) {
-        setState(() {
-          _isLoading = false;
-        });
-        return;
+  void _setupMessageListener() {
+    // Listen for messages from JavaScript
+    html.window.onMessage.listen((event) {
+      final data = event.data;
+      if (data is Map) {
+        if (data['type'] == 'google-sign-in' && data['idToken'] != null) {
+          _handleGoogleSignIn(data['idToken'], data['email']);
+        } else if (data['type'] == 'google-sign-in-error') {
+          setState(() {
+            _isLoading = false;
+            _errorMessage =
+                'Sign-in error: ${data['error'] ?? 'Unknown error'}';
+          });
+        }
       }
+    });
+  }
 
-      // Get authentication details from Google
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
+  Future<void> _handleGoogleSignIn(String idToken, String email) async {
+    try {
+      // Sign in with Supabase using the token
       final response = await _supabase.auth.signInWithIdToken(
         provider: OAuthProvider.google,
-        idToken: googleAuth.idToken!,
-        accessToken: googleAuth.accessToken ?? '',
+        idToken: idToken,
       );
 
       if (response.user != null) {
-        // Check if user exists in accounts table, if not, create with admin role
+        _navigateToAdminDashboard();
+      } else {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Failed to authenticate with Supabase';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Error: ${e.toString()}';
+      });
+    }
+  }
+
+  Future<void> _checkSession() async {
+    final session = _supabase.auth.currentSession;
+    if (session != null) {
+      _navigateToAdminDashboard();
+    }
+  }
+
+  Future<void> _navigateToAdminDashboard() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        // Check if user exists in accounts table
         final data =
             await _supabase
                 .from('accounts')
                 .select('email')
-                .eq('email', response.user!.email ?? '')
+                .eq('email', user.email ?? '')
                 .maybeSingle();
 
         if (data == null) {
-          // User doesn't exist in our database, add them with admin role
+          // User doesn't exist, create account with admin role
           await _supabase.from('accounts').insert({
-            'email': response.user!.email,
-            'firstname': response.user!.userMetadata?['given_name'] ?? '',
-            'lastname': response.user!.userMetadata?['family_name'] ?? '',
-            'role': 'admin', // Default role for web users is admin
+            'email': user.email,
+            'firstname': user.userMetadata?['given_name'] ?? '',
+            'lastname': user.userMetadata?['family_name'] ?? '',
+            'role': 'admin',
             'status': 'active',
           });
         }
+      }
 
-        // Navigate to dashboard
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const AdminDashboard()),
-          );
-        }
+      // Navigate to dashboard
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const AdminDashboard()),
+        );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
-      }
-    } finally {
-      if (mounted) {
+      debugPrint('Error handling session: $e');
+    }
+  }
+
+  void _signInWithGoogle() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      // Try the direct Supabase approach first (more reliable)
+      await _supabase.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: html.window.location.origin,
+      );
+
+      // The above will redirect, so we won't reach this point normally
+      // But if we do for some reason, try the alternative approach
+    } catch (e) {
+      // Try fallback approach with JavaScript
+      try {
+        // Send a message to JavaScript to trigger the Google auth
+        html.window.parent?.postMessage({
+          'action': 'triggerSupabaseGoogleAuth',
+        }, '*');
+      } catch (jsError) {
         setState(() {
           _isLoading = false;
+          _errorMessage = 'Error launching sign-in: $jsError';
         });
       }
     }
@@ -119,14 +173,26 @@ class _WebLoginScreenState extends State<WebLoginScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  icon: const Icon(Icons.login),
+                  icon: const Icon(Icons.g_mobiledata, size: 24),
                   label: const Text('Sign in with Google'),
                   onPressed: _isLoading ? null : _signInWithGoogle,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black87,
                   ),
                 ),
               ),
+
+              if (_errorMessage.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 20),
+                  child: Text(
+                    _errorMessage,
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
 
               if (_isLoading)
                 const Padding(

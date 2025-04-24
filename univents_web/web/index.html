@@ -1,16 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
+  <base href="$FLUTTER_BASE_HREF">
+
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="A UniVents Admin application.">
-
-  <!-- Add this meta tag with your actual Client ID -->
-  <meta name="google-signin-client-id" content="140959521015-35ienrnko4hnccue9ejmvum5gd1q0g4t.apps.googleusercontent.com">
 
   <!-- iOS meta tags & icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="UniVents Admin">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
@@ -29,6 +28,24 @@
   <script src="flutter.js" defer></script>
 </head>
 <body>
+  <!-- Google Sign In button - hidden initially -->
+  <div id="google-button-container" style="position: fixed; top: -100px; left: -100px;">
+    <!-- Button will be added here by the Google script -->
+  </div>
+  
+  <!-- Loading indicator -->
+  <div id="loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+    <div style="width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; margin: 0 auto; animation: spin 1s linear infinite;"></div>
+    <p style="font-family: Arial, sans-serif; margin-top: 16px;">Loading UniVents Admin...</p>
+  </div>
+  
+  <style>
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+
   <script>
     window.addEventListener('load', function(ev) {
       // Download main.dart.js
@@ -38,10 +55,47 @@
         },
         onEntrypointLoaded: function(engineInitializer) {
           engineInitializer.initializeEngine().then(function(appRunner) {
+            document.getElementById('loading').remove();
             appRunner.runApp();
           });
         }
       });
+    });
+  </script>
+  
+  <!-- Fallback to direct Supabase Google auth -->
+  <script>
+    window.triggerSupabaseGoogleAuth = function() {
+      // Create and submit a form to redirect to Supabase's OAuth flow
+      const form = document.createElement('form');
+      form.method = 'GET';
+      form.action = 'https://zsyxgeadumcnttknsfou.supabase.co/auth/v1/authorize';
+      
+      // Add provider parameter
+      const providerInput = document.createElement('input');
+      providerInput.type = 'hidden';
+      providerInput.name = 'provider';
+      providerInput.value = 'google';
+      form.appendChild(providerInput);
+      
+      // Add redirect_to parameter
+      const redirectInput = document.createElement('input');
+      redirectInput.type = 'hidden';
+      redirectInput.name = 'redirect_to';
+      redirectInput.value = window.location.origin || 'http://localhost:5050';
+      form.appendChild(redirectInput);
+      
+      // Submit the form
+      document.body.appendChild(form);
+      form.submit();
+    };
+    
+    // Listen for messages from Flutter
+    window.addEventListener('message', function(event) {
+      const data = event.data;
+      if (data && data.action === 'triggerSupabaseGoogleAuth') {
+        window.triggerSupabaseGoogleAuth();
+      }
     });
   </script>
 </body>
