@@ -48,6 +48,19 @@
 
   <script>
     window.addEventListener('load', function(ev) {
+      // Check and clear localStorage for auth-related items on fresh load
+      // This helps prevent issues with the code verifier not being found
+      if (!window.location.hash && !window.location.search) {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('sb-') || key.startsWith('supabase.'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+      }
+      
       // Download main.dart.js
       _flutter.loader.loadEntrypoint({
         serviceWorker: {

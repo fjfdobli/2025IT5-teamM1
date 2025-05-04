@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dashboard.dart';
 
 class WebLoginScreen extends StatefulWidget {
   const WebLoginScreen({super.key});
@@ -112,7 +113,7 @@ class _WebLoginScreenState extends State<WebLoginScreen> {
       // Navigate to dashboard
       if (mounted) {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const AdminDashboard()),
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
         );
       }
     } catch (e) {
@@ -127,15 +128,24 @@ class _WebLoginScreenState extends State<WebLoginScreen> {
     });
 
     try {
-      // Try the direct Supabase approach first (more reliable)
-      await _supabase.auth.signInWithOAuth(
+      // Ensure we have a properly set up redirect URL
+      final redirectUrl = Uri.parse(html.window.location.href).origin;
+      debugPrint('Using redirect URL: $redirectUrl');
+      
+      // Try direct Supabase approach
+      final result = await _supabase.auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: html.window.location.origin,
+        redirectTo: redirectUrl,
       );
+      
+      // Log auth attempt
+      debugPrint('OAuth sign-in initiated: ${result.toString()}');
 
-      // The above will redirect, so we won't reach this point normally
-      // But if we do for some reason, try the alternative approach
+      // The above will redirect, so we normally won't reach this point
+      // If we do, try the fallback approach
     } catch (e) {
+      debugPrint('OAuth error: ${e.toString()}');
+      
       // Try fallback approach with JavaScript
       try {
         // Send a message to JavaScript to trigger the Google auth
@@ -202,145 +212,6 @@ class _WebLoginScreenState extends State<WebLoginScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-// Simple admin dashboard with placeholder for CRUD functionality
-class AdminDashboard extends StatefulWidget {
-  const AdminDashboard({super.key});
-
-  @override
-  State<AdminDashboard> createState() => _AdminDashboardState();
-}
-
-class _AdminDashboardState extends State<AdminDashboard> {
-  int _selectedIndex = 0;
-  final _supabase = Supabase.instance.client;
-
-  final List<Widget> _screens = [const OrganizationsTab(), const EventsTab()];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('UniVents Admin Dashboard'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await _supabase.auth.signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) => const WebLoginScreen(),
-                  ),
-                );
-              }
-            },
-            tooltip: 'Sign Out',
-          ),
-        ],
-      ),
-      body: Row(
-        children: [
-          // Navigation rail for desktop
-          NavigationRail(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (int index) {
-              setState(() {
-                _selectedIndex = index;
-              });
-            },
-            labelType: NavigationRailLabelType.all,
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.business),
-                label: Text('Organizations'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.event),
-                label: Text('Events'),
-              ),
-            ],
-          ),
-
-          // Content area
-          Expanded(child: _screens[_selectedIndex]),
-        ],
-      ),
-    );
-  }
-}
-
-// Organization tab for CRUD operations
-class OrganizationsTab extends StatelessWidget {
-  const OrganizationsTab({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Organizations',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('Add Organization'),
-                onPressed: () {},
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          // Placeholder for organizations list
-          const Expanded(
-            child: Center(child: Text('Organizations list will appear here')),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Events tab for CRUD operations
-class EventsTab extends StatelessWidget {
-  const EventsTab({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Events',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('Add Event'),
-                onPressed: () {},
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          // Placeholder for events list
-          const Expanded(
-            child: Center(child: Text('Events list will appear here')),
-          ),
-        ],
       ),
     );
   }
