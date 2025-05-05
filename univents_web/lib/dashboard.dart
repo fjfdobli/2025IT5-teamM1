@@ -61,12 +61,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           // Content area
           Expanded(
-            child:
-                _selectedIndex == 0
-                    ? const HomeTab()
-                    : _selectedIndex == 1
-                    ? const OrganizationsTab()
-                    : const EventsTab(),
+            child: _selectedIndex == 0
+                ? HomeTab(onTabSelected: (index) {
+                    setState(() {
+                      _selectedIndex = index;
+                    });
+                  })
+                : _selectedIndex == 1
+                ? const OrganizationsTab()
+                : const EventsTab(),
           ),
         ],
       ),
@@ -76,7 +79,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
 // Home tab for main dashboard overview
 class HomeTab extends StatelessWidget {
-  const HomeTab({super.key});
+  final Function(int) onTabSelected;
+
+  const HomeTab({super.key, required this.onTabSelected});
 
   @override
   Widget build(BuildContext context) {
@@ -105,14 +110,7 @@ class HomeTab extends StatelessWidget {
                   'Manage university organizations',
                   () {
                     // Navigate to Organizations tab
-                    (context.findAncestorStateOfType<_DashboardScreenState>())
-                        ?.setState(() {
-                          (context
-                                  .findAncestorStateOfType<
-                                    _DashboardScreenState
-                                  >())
-                              ?._selectedIndex = 1;
-                        });
+                    onTabSelected(1);
                   },
                 ),
                 _buildDashboardCard(
@@ -123,14 +121,7 @@ class HomeTab extends StatelessWidget {
                   'Manage campus events',
                   () {
                     // Navigate to Events tab
-                    (context.findAncestorStateOfType<_DashboardScreenState>())
-                        ?.setState(() {
-                          (context
-                                  .findAncestorStateOfType<
-                                    _DashboardScreenState
-                                  >())
-                              ?._selectedIndex = 2;
-                        });
+                    onTabSelected(2);
                   },
                 ),
               ],
@@ -1004,8 +995,7 @@ class _OrganizationsTabState extends State<OrganizationsTab> {
                             Navigator.pop(context);
                             _showDeleteOrganizationDialog(organization);
                           },
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.red,
+                          style: TextButton.styleFrom(foregroundColor: Colors.red,
                           ),
                           child: const Text('Delete'),
                         ),
@@ -1404,6 +1394,29 @@ class _OrganizationsTabState extends State<OrganizationsTab> {
           ),
     );
   }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: Colors.indigo,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(value, style: const TextStyle(fontSize: 15)),
+        ],
+      ),
+    );
+  }
+
+  // Continue with _showEditOrganizationDialog and remaining methods...
 
   void _showEditOrganizationDialog(Map<String, dynamic> organization) {
     // Create text editing controllers initialized with current values
@@ -1816,27 +1829,6 @@ class _OrganizationsTabState extends State<OrganizationsTab> {
           ),
     );
   }
-
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: Colors.indigo,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(value, style: const TextStyle(fontSize: 15)),
-        ],
-      ),
-    );
-  }
 }
 
 // Events tab for CRUD operations
@@ -1884,7 +1876,6 @@ class _EventsTabState extends State<EventsTab> {
   }
 
   // Load events from Supabase
-
   Future<void> _loadEvents() async {
     setState(() {
       _isLoading = true;
@@ -1911,20 +1902,49 @@ class _EventsTabState extends State<EventsTab> {
     }
   }
 
-  // Add event to Supabase
+  // FIXED: Add event to Supabase
   Future<void> _addEvent(Map<String, dynamic> newEvent) async {
     try {
+      // First, let's check if we have any organizations in the database
+      final orgCheck = await supabase
+          .from('organizations')
+          .select('uid')
+          .limit(1);
+
+      if (orgCheck.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Cannot add event: No organizations exist. Please create an organization first.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+
+          }
+        return;
+      }
+
+      // Ensure we have a valid orguid
+      if (newEvent['orguid'] == null || newEvent['orguid'].isEmpty) {
+        // If no orguid is provided but we have a valid org ID, use it
+        if (_validOrgId.isNotEmpty) {
+          newEvent['orguid'] = _validOrgId;
+        } else {
+          // If still no valid orguid, use the first organization we found
+          newEvent['orguid'] = orgCheck[0]['uid'];
+        }
+      }
+
       // Insert event into Supabase
       final response = await supabase.from('events').insert(newEvent).select();
 
       if (response.isNotEmpty) {
         // Fetch the full event with organization details
-        final fullEvent =
-            await supabase
-                .from('events')
-                .select('*, organizations(*)')
-                .eq('id', response[0]['id'])
-                .single();
+        final fullEvent = await supabase
+            .from('events')
+            .select('*, organizations(*)')
+            .eq('uid', response[0]['uid'])
+            .single();
 
         setState(() {
           _events.add(fullEvent);
@@ -1966,12 +1986,11 @@ class _EventsTabState extends State<EventsTab> {
       await supabase.from('events').update(updateData).eq('uid', id);
 
       // Fetch the updated event with organization details
-      final fullEvent =
-          await supabase
-              .from('events')
-              .select('*, organizations(*)')
-              .eq('uid', id)
-              .single();
+      final fullEvent = await supabase
+          .from('events')
+          .select('*, organizations(*)')
+          .eq('uid', id)
+          .single();
 
       // Update the local list
       setState(() {
@@ -2003,11 +2022,20 @@ class _EventsTabState extends State<EventsTab> {
     }
   }
 
-  // Delete event from Supabase
+  // FIXED: Delete event from Supabase with cascade delete for attendees
   Future<void> _deleteEvent(String id) async {
     try {
-      // Delete event from Supabase using the correct column name (uid, not id)
-      await supabase.from('events').delete().eq('uid', id);
+      // First, delete all attendees for this event
+      await supabase
+          .from('event_attendees')
+          .delete()
+          .eq('eventid', id);
+
+      // Then delete the event itself
+      await supabase
+          .from('events')
+          .delete()
+          .eq('uid', id);
 
       // Update the local list
       setState(() {
@@ -2018,8 +2046,8 @@ class _EventsTabState extends State<EventsTab> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Event deleted successfully'),
-            backgroundColor: Colors.red,
+            content: Text('Event and its attendees deleted successfully'),
+            backgroundColor: Colors.green,
           ),
         );
       }
@@ -2367,6 +2395,8 @@ class _EventsTabState extends State<EventsTab> {
       ),
     );
   }
+
+  // Continue with remaining event methods...
 
   // Show event attendees dialog
   void _showEventAttendees(Map<String, dynamic> event) async {
@@ -2808,6 +2838,8 @@ class _EventsTabState extends State<EventsTab> {
           ),
     );
   }
+
+  // Continue with _showAddEventDialog and _showEditEventDialog in next part...
 
   void _showAddEventDialog() {
     // Create empty text editing controllers
